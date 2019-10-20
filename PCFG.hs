@@ -73,3 +73,39 @@ outside g (ys,zs) n =
 
 --------------------------------------------------------------------------
 
+-- This function constructs a chart like the one shown in (2.68), given a PCFG and a 
+-- list of terminal symbols. 
+-- The result is a Map that maps (symbol-list, nonterminal) pairs to probabilities. 
+-- Example:
+--  *PCFG> let c = insideChart g0 ["watches","spies","with","telescopes"] in (c ! (["watches","spies","with","telescopes"],"VP"))
+--  9.600000000000003e-3
+--  *PCFG> let c = insideChart g0 ["watches","spies","with","telescopes"] in (c ! (["spies","with","telescopes"],"NP"))
+--  1.2000000000000002e-2
+insideChart :: PCFG -> [Terminal] -> M.Map ([Terminal],Nonterminal) Prob
+insideChart g string =
+    let (nonterms, sigma, initprob, ruleprob) = g in
+    let cellsToFill = [(len,startpos,n) | 
+                            len <- [1 .. length string], 
+                            startpos <- [0 .. length string - len], 
+                            n <- nonterms
+                      ]
+    in
+    let fillCells cells chart =
+            case cells of
+            [] -> chart
+            (len,startpos,n):rest ->
+                let xs = take len (drop startpos string) in
+                let prob = case xs of
+                           [] -> 0
+                           [x] -> ruleprob (EndRule n x)
+                           _ -> sum [ruleprob (BranchRule n l r) * (M.findWithDefault 0 (take i xs, l) chart) * (M.findWithDefault 0 (drop i xs, r) chart) |
+                                        i <- [1 .. length xs - 1], 
+                                        l <- nonterms, 
+                                        r <- nonterms
+                                    ]
+                in
+                let newchart = if prob /= 0 then M.insert (xs,n) prob chart else chart in
+                fillCells rest newchart
+    in
+    fillCells cellsToFill M.empty
+
