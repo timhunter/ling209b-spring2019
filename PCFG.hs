@@ -87,12 +87,27 @@ insideChart g string =
 
     let (nonterms, sigma, initprob, ruleprob) = g in
 
-    -- Set up the list of cells to be filled, in order
-    let cellsToFill = [(take len (drop startpos string), n) | 
+    -- Set up the list of cells to be filled, in order; 
+    -- each cell is represented by a substring
+    let cellsToFill = [take len (drop startpos string) | 
                             len <- [1 .. length string], 
-                            startpos <- [0 .. length string - len], 
-                            n <- nonterms
+                            startpos <- [0 .. length string - len]
                       ]
+    in
+
+    -- Define a function that will add the inside value for a single (string,nonterminal) pair 
+    -- to an existing chart
+    let oneInsideValue xs n chart =
+            let prob = case xs of
+                       [] -> 0
+                       [x] -> ruleprob (EndRule n x)
+                       _ -> sum [ruleprob (BranchRule n l r) * (M.findWithDefault 0 (take i xs, l) chart) * (M.findWithDefault 0 (drop i xs, r) chart) |
+                                    i <- [1 .. length xs - 1], 
+                                    l <- nonterms, 
+                                    r <- nonterms
+                                ]
+            in
+            if prob /= 0 then M.insert (xs,n) prob chart else chart
     in
 
     -- Define a function which takes a list of cells and a chart, and 
@@ -100,18 +115,8 @@ insideChart g string =
     let fillCells cells chart =
             case cells of
             [] -> chart
-            (xs,n):rest ->
-                let prob = case xs of
-                           [] -> 0
-                           [x] -> ruleprob (EndRule n x)
-                           _ -> sum [ruleprob (BranchRule n l r) * (M.findWithDefault 0 (take i xs, l) chart) * (M.findWithDefault 0 (drop i xs, r) chart) |
-                                        i <- [1 .. length xs - 1], 
-                                        l <- nonterms, 
-                                        r <- nonterms
-                                    ]
-                in
-                let newchart = if prob /= 0 then M.insert (xs,n) prob chart else chart in
-                fillCells rest newchart
+            xs:rest -> let newChart = Prelude.foldl (\ch -> \n -> oneInsideValue xs n ch) chart nonterms in
+                       fillCells rest newChart
     in
 
     -- Now, fill in all the cells, starting with an empty chart
@@ -147,12 +152,35 @@ outsideChart g string =
     -- Get a completed chart of inside values
     let ichart = insideChart g string in
 
-    -- Set up the list of cells to be filled, in order
-    let cellsToFill = [(len,startpos,n) |
+    -- Set up the list of cells to be filled, in order; 
+    -- each cell is represented by a pair of strings (ys,zs)
+    let cellsToFill = [((take startpos string, drop (startpos+len) string), n) |
                             len <- [length string, length string - 1 .. 1], 
                             startpos <- [0 .. length string - len], 
                             n <- nonterms
                       ]
+    in
+
+    -- Define a function that will add the outside value for a single ((string,string),nonterminal) pair 
+    -- to an existing chart
+    let oneOutsideValue (ys,zs) n chart =
+            let prob =
+                    if ys == [] && zs == [] then
+                        initprob n
+                    else
+                        sum [ruleprob (BranchRule p n r) * (M.findWithDefault 0 (take i zs, r) ichart) * (M.findWithDefault 0 ((ys, drop i zs), p) chart) |
+                                    i <- [1 .. length zs], 
+                                    p <- nonterms, 
+                                    r <- nonterms
+                            ]
+                        +
+                        sum [ruleprob (BranchRule p l n) * (M.findWithDefault 0 (drop i ys, l) ichart) * (M.findWithDefault 0 ((take i ys, zs), p) chart) |
+                                    i <- [0 .. length ys - 1], 
+                                    p <- nonterms, 
+                                    l <- nonterms
+                            ]
+            in
+            if prob /= 0 then M.insert ((ys,zs),n) prob chart else chart
     in
 
     -- Define a function which takes a list of cells and a chart, and 
@@ -160,26 +188,8 @@ outsideChart g string =
     let fillCells cells chart =
             case cells of
             [] -> chart
-            (len,startpos,n):rest ->
-                let (ys,zs) = (take startpos string, drop (startpos + len) string) in
-                let prob =
-                        if ys == [] && zs == [] then
-                            initprob n
-                        else
-                            sum [ruleprob (BranchRule p n r) * M.findWithDefault 0 (take i zs, r) ichart * M.findWithDefault 0 ((ys, drop i zs), p) chart |
-                                        i <- [1 .. length zs], 
-                                        p <- nonterms, 
-                                        r <- nonterms
-                                ]
-                            +
-                            sum [ruleprob (BranchRule p l n) * M.findWithDefault 0 (drop i ys, l) ichart * M.findWithDefault 0 ((take i ys, zs), p) chart |
-                                        i <- [0 .. length ys - 1], 
-                                        p <- nonterms, 
-                                        l <- nonterms
-                                ]
-                in
-                let newchart = if prob /= 0 then M.insert ((ys,zs),n) prob chart else chart in
-                fillCells rest newchart
+            ((ys,zs),n):rest -> let newChart = Prelude.foldl (\ch -> \n -> oneOutsideValue (ys,zs) n ch) chart nonterms in
+                                fillCells rest newChart
     in
 
     -- Now, fill in all the cells, starting with an empty chart
