@@ -81,20 +81,26 @@ outside g (ys,zs) n =
 --  9.600000000000003e-3
 --  *PCFG> let c = insideChart g0 ["watches","spies","with","telescopes"] in (c ! (["spies","with","telescopes"],"NP"))
 --  1.2000000000000002e-2
+
 insideChart :: PCFG -> [Terminal] -> M.Map ([Terminal],Nonterminal) Prob
 insideChart g string =
+
     let (nonterms, sigma, initprob, ruleprob) = g in
-    let cellsToFill = [(len,startpos,n) | 
+
+    -- Set up the list of cells to be filled, in order
+    let cellsToFill = [(take len (drop startpos string), n) | 
                             len <- [1 .. length string], 
                             startpos <- [0 .. length string - len], 
                             n <- nonterms
                       ]
     in
+
+    -- Define a function which takes a list of cells and a chart, and 
+    -- fills in those cells in the given order
     let fillCells cells chart =
             case cells of
             [] -> chart
-            (len,startpos,n):rest ->
-                let xs = take len (drop startpos string) in
+            (xs,n):rest ->
                 let prob = case xs of
                            [] -> 0
                            [x] -> ruleprob (EndRule n x)
@@ -107,7 +113,21 @@ insideChart g string =
                 let newchart = if prob /= 0 then M.insert (xs,n) prob chart else chart in
                 fillCells rest newchart
     in
+
+    -- Now, fill in all the cells, starting with an empty chart
     fillCells cellsToFill M.empty
+
+-- Total probability of a string, using inside values from a chart, following equation (2.66).
+-- Example:
+--  *PCFG> stringProbViaInsideChart g0 ["watches","spies","with","telescopes"]
+--  9.600000000000003e-3
+stringProbViaInsideChart :: PCFG -> [Terminal] -> Prob
+stringProbViaInsideChart g xs =
+    let (nonterms, sigma, initprob, ruleprob) = g in
+    let chart = insideChart g xs in
+    sum [initprob n * M.findWithDefault 0 (xs,n) chart | n <- nonterms]
+
+--------------------------------------------------------------------------
 
 -- This function constructs a chart of outside values, given a PCFG and a sequence of 
 -- terminal symbols. We didn't discuss this in class, but it's analogous to constructing 
@@ -118,16 +138,25 @@ insideChart g string =
 --  4.8e-2
 --  *PCFG> let c = outsideChart g0 ["watches","spies","with","telescopes"] in (c ! ((["watches","spies"],[]),"PP"))
 --  3.200000000000001e-2
+
 outsideChart :: PCFG -> [Terminal] -> M.Map (([Terminal],[Terminal]),Nonterminal) Prob
 outsideChart g string =
+
     let (nonterms, sigma, initprob, ruleprob) = g in
+
+    -- Get a completed chart of inside values
     let ichart = insideChart g string in
+
+    -- Set up the list of cells to be filled, in order
     let cellsToFill = [(len,startpos,n) |
                             len <- [length string, length string - 1 .. 1], 
                             startpos <- [0 .. length string - len], 
                             n <- nonterms
                       ]
     in
+
+    -- Define a function which takes a list of cells and a chart, and 
+    -- fills in those cells in the given order
     let fillCells cells chart =
             case cells of
             [] -> chart
@@ -152,5 +181,7 @@ outsideChart g string =
                 let newchart = if prob /= 0 then M.insert ((ys,zs),n) prob chart else chart in
                 fillCells rest newchart
     in
+
+    -- Now, fill in all the cells, starting with an empty chart
     fillCells cellsToFill M.empty
 
