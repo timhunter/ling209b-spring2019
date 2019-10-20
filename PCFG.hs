@@ -109,3 +109,48 @@ insideChart g string =
     in
     fillCells cellsToFill M.empty
 
+-- This function constructs a chart of outside values, given a PCFG and a sequence of 
+-- terminal symbols. We didn't discuss this in class, but it's analogous to constructing 
+-- a chart of inside values, just in reverse; see p.353 and Figure 3.2 of Jelinek et al (1992). 
+-- The result is a Map that maps ((symbol-list,symbol-list), nonterminal) pairs to probabilities. 
+-- Example:
+--  *PCFG> let c = outsideChart g0 ["watches","spies","with","telescopes"] in (c ! ((["watches"],["with","telescopes"]),"NP"))
+--  4.8e-2
+--  *PCFG> let c = outsideChart g0 ["watches","spies","with","telescopes"] in (c ! ((["watches","spies"],[]),"PP"))
+--  3.200000000000001e-2
+outsideChart :: PCFG -> [Terminal] -> M.Map (([Terminal],[Terminal]),Nonterminal) Prob
+outsideChart g string =
+    let (nonterms, sigma, initprob, ruleprob) = g in
+    let ichart = insideChart g string in
+    let cellsToFill = [(len,startpos,n) |
+                            len <- [length string, length string - 1 .. 1], 
+                            startpos <- [0 .. length string - len], 
+                            n <- nonterms
+                      ]
+    in
+    let fillCells cells chart =
+            case cells of
+            [] -> chart
+            (len,startpos,n):rest ->
+                let (ys,zs) = (take startpos string, drop (startpos + len) string) in
+                let prob =
+                        if ys == [] && zs == [] then
+                            initprob n
+                        else
+                            sum [ruleprob (BranchRule p n r) * M.findWithDefault 0 (take i zs, r) ichart * M.findWithDefault 0 ((ys, drop i zs), p) chart |
+                                        i <- [1 .. length zs], 
+                                        p <- nonterms, 
+                                        r <- nonterms
+                                ]
+                            +
+                            sum [ruleprob (BranchRule p l n) * M.findWithDefault 0 (drop i ys, l) ichart * M.findWithDefault 0 ((take i ys, zs), p) chart |
+                                        i <- [0 .. length ys - 1], 
+                                        p <- nonterms, 
+                                        l <- nonterms
+                                ]
+                in
+                let newchart = if prob /= 0 then M.insert ((ys,zs),n) prob chart else chart in
+                fillCells rest newchart
+    in
+    fillCells cellsToFill M.empty
+
