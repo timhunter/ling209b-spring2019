@@ -5,12 +5,12 @@ import Data.Map as M
 type State = Int
 type Symbol = String
 type Prob = Double
-type FSA = ([State], [Symbol], State -> Prob, State -> Prob, (State,Symbol,State) -> Prob)
+type PFSA = ([State], [Symbol], State -> Prob, State -> Prob, (State,Symbol,State) -> Prob)
 
 --------------------------------------------------------------------------
 
 -- Here's the PFSA from (2.22) on the handout.
-m0 :: FSA
+m0 :: PFSA
 m0 = (  [1,2,3], 
         ["C","V"], 
         \q -> M.findWithDefault 0 q (M.fromList [(1,1.0)]), 
@@ -31,7 +31,7 @@ m0 = (  [1,2,3],
 -- Example:
 --  *PFSA> forward m0 ["V","C","V"] 1
 --  7.56e-2
-forward :: FSA -> [Symbol] -> State -> Prob
+forward :: PFSA -> [Symbol] -> State -> Prob
 forward m xs q =
     let (states, sigma, initprob, finprob, trprob) = m in
     if xs == [] then
@@ -43,7 +43,7 @@ forward m xs q =
 -- Example:
 --  *PFSA> stringprobViaForward m0 ["V","C","V"]
 --  1.5120000000000001e-2
-stringprobViaForward :: FSA -> [Symbol] -> Prob
+stringprobViaForward :: PFSA -> [Symbol] -> Prob
 stringprobViaForward m xs =
     let (states, sigma, initprob, finprob, trprob) = m in
     sum [forward m xs q * finprob q | q <- states]
@@ -55,7 +55,7 @@ stringprobViaForward m xs =
 -- Example:
 --  *PFSA> backward m0 ["C","V"] 3
 --  3.6e-2
-backward :: FSA -> [Symbol] -> State -> Prob
+backward :: PFSA -> [Symbol] -> State -> Prob
 backward m xs q =
     let (states, sigma, initprob, finprob, trprob) = m in
     if xs == [] then
@@ -67,7 +67,7 @@ backward m xs q =
 -- Example:
 --  *PFSA> stringprobViaBackward m0 ["V","C","V"]
 --  1.5119999999999998e-2
-stringprobViaBackward :: FSA -> [Symbol] -> Prob
+stringprobViaBackward :: PFSA -> [Symbol] -> Prob
 stringprobViaBackward m xs =
     let (states, sigma, initprob, finprob, trprob) = m in
     sum [initprob q * backward m xs q | q <- states]
